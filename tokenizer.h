@@ -409,7 +409,7 @@ void handle_double_quote(const vector<ASTNode *> &tokens)
 
 
 
-vector<ASTNode *> parse_tokens(const vector<ASTNode *> &tokens)
+/*vector<ASTNode *> parse_tokens(const vector<ASTNode *> &tokens)
 {
     ASTNode currentNode;
     vector<ASTNode *> result;
@@ -508,4 +508,126 @@ vector<ASTNode *> parse_tokens(const vector<ASTNode *> &tokens)
         result.push_back(new ASTNode{currentNode.value, currentNode.children, currentNode.type});
     }
     return result;
+}*/
+
+
+
+
+
+
+
+// Helper function to safely extract the command payload arguments
+void build_command_nodes(const vector<ASTNode *> &tokens, vector<ASTNode *> &output)
+{
+    ASTNode *currentCmd = nullptr;
+
+    for (size_t i = 0; i < tokens.size(); i++)
+    {
+        // Handle nested groups
+        if (tokens[i]->type == TokenType::LPAREN)
+        {
+            size_t closeIndex = find_matching_rparen(tokens, i);
+            if (closeIndex == tokens.size()) return;
+
+            vector<ASTNode *> nested(tokens.begin() + i + 1, tokens.begin() + closeIndex);
+            vector<ASTNode *> nestedResult = parse_tokens(nested);
+            
+            if (!nestedResult.empty()) {
+                output.push_back(new ASTNode{"group", nestedResult, TokenType::LRPAREN});
+            }
+            i = closeIndex;
+            currentCmd = nullptr;
+        }
+        // Handle Redirections (binds tightly to the current running command)
+        else if (tokens[i]->type == TokenType::REDIRECT_IN || 
+                 tokens[i]->type == TokenType::REDIRECT_OUT || 
+                 tokens[i]->type == TokenType::REDIRECT_APPEND)
+        {
+            if (i + 1 >= tokens.size()) return; // Syntax error safety
+
+            ASTNode *fileNode = new ASTNode{tokens[i+1]->value, {}, TokenType::FILE};
+            ASTNode *prevNode = nullptr;
+
+            if (!output.empty() && currentCmd) {
+                prevNode = output.back();
+                output.pop_back();
+            }
+
+            ASTNode *redirNode = new ASTNode{tokens[i]->value, {prevNode, fileNode}, tokens[i]->type};
+            output.push_back(redirNode);
+            i++; // skip file token
+            currentCmd = nullptr;
+        }
+        // Handle operators (pass them through cleanly as markers for the next phase)
+        else if (tokens[i]->type == TokenType::PIPE || tokens[i]->type == TokenType::AND || 
+                 tokens[i]->type == TokenType::OR || tokens[i]->type == TokenType::END)
+        {
+            output.push_back(tokens[i]);
+            currentCmd = nullptr;
+        }
+        // Handle basic arguments / Command words
+        else if (tokens[i]->type == TokenType::WORD || tokens[i]->type == TokenType::SINGLE_QUOTE || tokens[i]->type == TokenType::DOUBLE_QUOTE)
+        {
+            if (!currentCmd)
+            {
+                currentCmd = new ASTNode{tokens[i]->value, {}, TokenType::COMMAND};
+                output.push_back(currentCmd);
+            }
+            currentCmd->children.push_back(tokens[i]);
+        }
+    }
+}
+
+// Main parser entry point
+vector<ASTNode *> parse_tokens(const vector<ASTNode *> &tokens)
+{
+    if (tokens.empty()) return {};
+
+    // Phase 1: Build the primary structures (Commands, Redirections, Groups)
+    vector<ASTNode *> stage1;
+    build_command_nodes(tokens, stage1);
+
+    // Phase 2: Process High Precedence Operators (Pipes '|')
+    vector<ASTNode *> stage2;
+    for (size_t i = 0; i < stage1.size(); i++)
+    {
+        if (stage1[i]->type == TokenType::PIPE)
+        {
+            if (stage2.empty() || i + 1 >= stage1.size()) return {}; // Syntax error
+            
+            ASTNode *left = stage2.back();
+            stage2.pop_back();
+            ASTNode *right = stage1[i+1];
+            i++; // Consume right-hand node
+
+            stage2.push_back(new ASTNode{"|", {left, right}, TokenType::PIPE});
+        }
+        else
+        {
+            stage2.push_back(stage1[i]);
+        }
+    }
+
+    // Phase 3: Process Lower Precedence Operators (&&, ||, ;)
+    vector<ASTNode *> finalResult;
+    for (size_t i = 0; i < stage2.size(); i++)
+    {
+        if (stage2[i]->type == TokenType::AND || stage2[i]->type == TokenType::OR || stage2[i]->type == TokenType::END)
+        {
+            if (finalResult.empty() || i + 1 >= stage2.size()) return {}; // Syntax error
+            
+            ASTNode *left = finalResult.back();
+            finalResult.pop_back();
+            ASTNode *right = stage2[i+1];
+            i++; // Consume right-hand node
+
+            finalResult.push_back(new ASTNode{stage2[i-1]->value, {left, right}, stage2[i-1]->type});
+        }
+        else
+        {
+            finalResult.push_back(stage2[i]);
+        }
+    }
+
+    return finalResult;
 }
