@@ -9,6 +9,9 @@
 using namespace std;
 
 int execute_command(const ASTNode *node);
+int execute_pipe(const ASTNode *node);
+int execute_redirection(const ASTNode *node);
+int execute_node(const ASTNode *node);
 
 bool isAmpersand = false;
 
@@ -28,6 +31,53 @@ void executor(vector<ASTNode *> &ast)
     }
 }
 
+int execute_redirection(const ASTNode *node)
+{
+    if (node->children.size() < 2)
+        return 1;
+
+    // The right child is always the FILE node according to your parser
+    string filename = node->children[1]->value;
+    int fd = -1;
+    int target_fd = -1;
+
+    if (node->type == TokenType::REDIRECT_OUT)
+    {
+        fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        target_fd = STDOUT_FILENO;
+    }
+    else if (node->type == TokenType::REDIRECT_APPEND)
+    {
+        fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+        target_fd = STDOUT_FILENO;
+    }
+    else if (node->type == TokenType::REDIRECT_IN)
+    {
+        fd = open(filename.c_str(), O_RDONLY);
+        target_fd = STDIN_FILENO;
+    }
+
+    if (fd < 0)
+    {
+        perror(("failed to open file: " + filename).c_str());
+        return 1;
+    }
+
+    // Duplicate standard FD to our file descriptor
+    int saved_fd = dup(target_fd);
+    dup2(fd, target_fd);
+    close(fd);
+
+    // Execute the left child command with streams redirected
+    int result = execute_node(node->children[0]);
+
+    // Restore the original standard FD stream
+    dup2(saved_fd, target_fd);
+    close(saved_fd);
+
+    return result;
+}
+
 int execute_node(const ASTNode *node)
 {
     if (!node)
@@ -38,11 +88,11 @@ int execute_node(const ASTNode *node)
     }
     else if (node->type == TokenType::PIPE)
     {
-        // Handle pipeline execution
+        return execute_pipe(node);
     }
     else if (node->type == TokenType::REDIRECT_IN || node->type == TokenType::REDIRECT_OUT || node->type == TokenType::REDIRECT_APPEND)
     {
-        // Handle redirection
+        return execute_redirection(node);
     }
     else if (node->type == TokenType::AND)
     {
@@ -80,15 +130,48 @@ int execute_node(const ASTNode *node)
     return 0;
 }
 
-int execute_pipeline(const ASTNode *node)
+int execute_pipe(const ASTNode *node)
 {
-    // Placeholder for a function that executes a pipeline of commands represented by a vector of ASTNodes
-    // This function will need to set up pipes between the commands and execute them in the correct order
-    // The implementation will depend on how the ASTNodes are structured and how you want to execute pipelines
-    if (node->children.empty())
-        return 0;
+    if (node->children.size() < 2)
+        return 1;
 
-    return 0;
+    int pipefds[2];
+    if (pipe(pipefds) == -1)
+    {
+        perror("pipe creation failed");
+        return 1;
+    }
+
+    pid_t pid1 = fork();
+    if (pid1 == 0)
+    {
+        // Left Child: Writes to pipe
+        dup2(pipefds[1], STDOUT_FILENO);
+        close(pipefds[0]);
+        close(pipefds[1]);
+        exit(execute_node(node->children[0]));
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 == 0)
+    {
+        // Right Child: Reads from pipe
+        dup2(pipefds[0], STDIN_FILENO);
+        close(pipefds[0]);
+        close(pipefds[1]);
+        exit(execute_node(node->children[1]));
+    }
+
+    // Parent closes its copies of the pipe ends
+    close(pipefds[0]);
+    close(pipefds[1]);
+
+    int status1, status2;
+    waitpid(pid1, &status1, 0);
+    waitpid(pid2, &status2, 0);
+
+    // Return the status of the rightmost command in the pipeline
+    return WIFEXITED(status2) ? WEXITSTATUS(status2) : 1;
 }
 
 int execute_command(const ASTNode *node)
