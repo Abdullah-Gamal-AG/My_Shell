@@ -34,3 +34,5 @@ struct ASTNode
 
 inline const std::vector<std::string> specifiedTokens = {"|", "<", ">", ">>", "||", "&&", "(", ")", ";", "&", "$", "\"", "\'", "\\", "~", "{", "}"};
 inline const std::vector<std::string> binaryOperators = {"|", "||", "&&", ">", ">>", "<"};
+
+inline const std::vector<std::string> builtInCommands = {"cd", "exit", "declare"};

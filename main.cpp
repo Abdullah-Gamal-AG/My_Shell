@@ -24,7 +24,7 @@ int main()
     while (true)
     {
         string currentPath = fs::current_path().string();
-        cout << currentPath << "> ";
+        cout << currentPath << "> " << flush;
         if (!getline(cin, input))
             break;
         vector<ASTNode *> tokens = tokenize(input);

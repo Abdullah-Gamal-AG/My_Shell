@@ -200,71 +200,30 @@ int execute_command(const ASTNode *node)
             cerr << args[0] << ": command not found" << endl;
             exit(127); // Exit after execution
         }
-        else if (pid > 0)
+    }
+    else if (pid > 0)
+    {
+        if (isAmpersand)
         {
-            if (isAmpersand)
-            {
-                // Background process requested with '&'
-                cout << "[Process running in background with PID " << pid << "]" << endl;
-                return 0;
-            }
-            else
-            {
-                int status;
-                waitpid(pid, &status, 0);
-                if (WIFEXITED(status))
-                {
-                    return WEXITSTATUS(status);
-                }
-                return 1;
-            }
+            // Background process requested with '&'
+            cout << "[Process running in background with PID " << pid << "]" << endl;
+            isAmpersand = false;
+            return 0;
         }
-        else
+
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status))
         {
-            // Fork failed
-            cerr << "Failed to fork process" << endl;
-            return -1;
+            return WEXITSTATUS(status);
         }
+        return 1;
+    }
+    else
+    {
+        // Fork failed
+        cerr << "Failed to fork process" << endl;
+        return -1;
     }
     return 0;
 }
-
-/*
-if (node->type == TokenType::COMMAND)
-        {
-            // Handle command execution
-            int status = execute_command(node);
-        }
-        else if (node->type == TokenType::PIPE)
-        {
-            // Handle pipeline execution
-        }
-        else if (node->type == TokenType::REDIRECT_IN || node->type == TokenType::REDIRECT_OUT || node->type == TokenType::REDIRECT_APPEND)
-        {
-            // Handle redirection
-        }
-        else if (node->type == TokenType::AND)
-        {
-            // Handle logical operators
-            int leftStatus = executor(node->children[0]);
-            if (leftStatus == 0)
-            {
-                int rightStatus = execute_command(node->children[1]);
-            }
-        }
-        else if (node->type == TokenType::OR)
-        {
-            // Handle logical operators
-            int leftStatus = execute_command(node->children[0]);
-            if (leftStatus != 0)
-            {
-                int rightStatus = execute_command(node->children[1]);
-            }
-        }
-        else if (node->type == TokenType::END)
-        {
-            // Handle command sequence termination
-            execute_command(node->children[0]);
-            execute_command(node->children[1]);
-        }
-*/
