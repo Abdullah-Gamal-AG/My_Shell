@@ -3,7 +3,7 @@
 #include <string>
 #include <filesystem>
 #include "tokenizer.h"
-
+#include "executor.h"
 namespace fs = std::filesystem;
 using namespace std;
 
@@ -31,6 +31,7 @@ int main()
         vector<ASTNode *> parsedTokens = parse_tokens(tokens);
         if (parsedTokens.empty())
             continue;
-        printAST(parsedTokens[0]);
+        executor(parsedTokens);
+        // printAST(parsedTokens[0]);
     }
 }
