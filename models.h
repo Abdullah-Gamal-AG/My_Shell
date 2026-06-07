@@ -22,6 +22,7 @@ enum class TokenType
     SINGLE_QUOTE,
     DOUBLE_QUOTE,
     AMPERSAND,
+    COMMAND_SUBSTITUTION,
     SKIP
 };
 
@@ -32,7 +33,7 @@ struct ASTNode
     TokenType type;
 };
 
-inline const std::vector<std::string> specifiedTokens = {"|", "<", ">", ">>", "||", "&&", "(", ")", ";", "&", "$", "\"", "\'", "\\", "~", "{", "}"};
+inline const std::vector<std::string> specifiedTokens = {"|", "<", ">", ">>", "||", "&&", "(", ")", ";", "&", "$", "\"", "\'", "\\", "~", "{", "}", "#"};
 inline const std::vector<std::string> binaryOperators = {"|", "||", "&&", ">", ">>", "<"};
 
-inline const std::vector<std::string> builtInCommands = {"cd", "exit", "declare"};
+inline const std::vector<std::string> builtInCommands = {"cd", "exit", "declare", "script"};

@@ -4,22 +4,24 @@
 #include <filesystem>
 #include "tokenizer.h"
 #include "executor.h"
+#include <signal.h>
 namespace fs = std::filesystem;
 using namespace std;
 
-void printAST(const ASTNode *node, int depth = 0)
+void freeAST(ASTNode *node)
 {
     if (!node)
         return;
-    cout << string(depth * 2, ' ') << "Value: " << node->value << ", Type: " << static_cast<int>(node->type) << endl;
-    for (const auto &child : node->children)
+    for (auto &child : node->children)
     {
-        printAST(child, depth + 1);
+        freeAST(child);
     }
+    delete node;
 }
-
 int main()
 {
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
     string input;
     while (true)
     {
@@ -32,6 +34,7 @@ int main()
         if (parsedTokens.empty())
             continue;
         executor(parsedTokens);
-        // printAST(parsedTokens[0]);
+
+        freeAST(parsedTokens[0]);
     }
 }
