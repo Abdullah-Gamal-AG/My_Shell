@@ -8,12 +8,14 @@
 #include "models.h"
 #include <algorithm>
 #include <signal.h>
+#include <climits>
 using namespace std;
 
 int execute_command(const ASTNode *node);
 int execute_pipe(const ASTNode *node);
 int execute_redirection(const ASTNode *node);
 int execute_node(const ASTNode *node);
+int execute_buildin_command(const ASTNode *node);
 
 bool isAmpersand = false;
 
@@ -227,17 +229,58 @@ int execute_buildin_command(const ASTNode *node)
     }
     else if (node->value == "cd")
     {
-        if (node->children.empty())
+        string target_path;
+        char cwd_buffer[PATH_MAX];
+        string current_pwd = "";
+        if (getcwd(cwd_buffer, sizeof(cwd_buffer)) != nullptr)
         {
-            cerr << "cd: missing argument" << endl;
+            current_pwd = string(cwd_buffer);
+        }
+        if (node->children.size() <= 1)
+        {
+            const char *home = getenv("HOME");
+            if (!home)
+            {
+                cerr << "cd: HOME not set" << endl;
+                return 1;
+            }
+            target_path = home;
+        }
+        else if (node->children[1]->value == "-")
+        {
+            const char *oldpwd = getenv("OLDPWD");
+            if (oldpwd)
+            {
+                target_path = oldpwd;
+                cout << target_path << endl;
+            }
+            else
+            {
+                cerr << "cd: OLDPWD not set" << endl;
+                return 1;
+            }
+        }
+        else
+        {
+            target_path = node->children[1]->value;
+        }
+
+        if (chdir(target_path.c_str()) == -1)
+        {
+            perror(("cd: " + target_path).c_str());
             return 1;
         }
-        const char *path = node->children[0]->value.c_str();
-        if (chdir(path) == -1)
+
+        if (!current_pwd.empty())
         {
-            perror(("cd: " + node->children[0]->value).c_str());
-            return 1;
+            setenv("OLDPWD", current_pwd.c_str(), 1);
         }
+
+        if (getcwd(cwd_buffer, sizeof(cwd_buffer)) != nullptr)
+        {
+            setenv("PWD", cwd_buffer, 1);
+        }
+
         return 0;
     }
     else if (node->value == "declare")
